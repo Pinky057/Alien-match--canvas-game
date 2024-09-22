@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alien Match Game</title>
+    <style>
+      canvas {
+        display: block;
+        margin: 0 auto;
+        background-color: #000;
+      }
+      body {
+        text-align: center;
+        font-family: Arial, sans-serif;
+        background-color: #222;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Alien Match Game</h1>
+    <canvas id="gameCanvas"></canvas>
+    <h2>Score: <span id="score">0</span></h2>
+    <h2>Level: <span id="level">1</span></h2>
+    <h2>Time Left: <span id="timer">60</span> seconds</h2>
+    <h2 id="gameOver" style="display: none">Game Over!</h2>
+
+    <script>
+      // Game variables
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      const tileSize = 60; // size of each tile
+      const gridWidth = 8; // 8x8 grid
+      const gridHeight = 8;
+      const alienTypes = ["👽", "👾", "🛸", "🪐", "💣", "🌈", "🚀"]; // Power-ups included
+      const aliens = [];
+      let selectedTile = null; // Store the first selected tile
+      let score = 0; // Keep track of the score
+      let level = 1;
+      let timeLeft = 60; // Time per level in seconds
+      let targetScore = 100;
+      let animating = false; // Tracks if an animation is running
+
+      // Resize canvas dynamically to fit screen
+      function resizeCanvas() {
+        canvas.width = gridWidth * tileSize;
+        canvas.height = gridHeight * tileSize;
+      }
+
+      // Initialize the grid with random alien types
+      function initGrid() {
+        for (let y = 0; y < gridHeight; y++) {
+          aliens[y] = [];
+          for (let x = 0; x < gridWidth; x++) {
+            aliens[y][x] =
+              alienTypes[Math.floor(Math.random() * alienTypes.length)];
+          }
+        }
+      }
+
+      // Draw the grid with aliens
+      function drawGrid() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let y = 0; y < gridHeight; y++) {
+          for (let x = 0; x < gridWidth; x++) {
+            if (aliens[y][x] !== null) {
+              // Only draw non-null tiles
+              ctx.fillStyle = "#fff";
+              ctx.font = "40px Arial";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              const alien = aliens[y][x];
+              const posX = x * tileSize + tileSize / 2;
+              const posY = y * tileSize + tileSize / 2;
+              ctx.fillText(alien, posX, posY);
+            }
+
+            // Draw a border around the tile
+            ctx.strokeStyle = "#fff";
+            ctx.strokeRect(x * tileSize, y * tileSize, tileSize, tileSize);
+          }
+        }
+      }
+
+      // Get the tile (x, y) position based on mouse click
+      function getTileCoordinates(mouseX, mouseY) {
+        const tileX = Math.floor(mouseX / tileSize);
+        const tileY = Math.floor(mouseY / tileSize);
+        return { x: tileX, y: tileY };
+      }
+
+      // Handle mouse click on canvas
+      canvas.addEventListener("click", function (event) {
+        if (animating) return; // Prevent interaction during animations
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        const tile = getTileCoordinates(mouseX, mouseY);
+        if (
+          aliens[tile.y][tile.x] === "💣" ||
+          aliens[tile.y][tile.x] === "🌈" ||
+          aliens[tile.y][tile.x] === "🚀"
+        ) {
+          handlePowerUp(tile.x, tile.y); // Handle bomb, rainbow, or rocket power-up
+        } else if (!selectedTile) {
+          // Select the first tile
+          selectedTile = tile;
+          highlightTile(tile.x, tile.y);
+        } else {
+          // Select the second tile and try swapping
+          swapTilesAnimated(selectedTile.x, selectedTile.y, tile.x, tile.y);
+          selectedTile = null; // Reset selection
+        }
+      });
+
+      // Highlight the selected tile
+      function highlightTile(x, y) {
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(x * tileSize, y * tileSize, tileSize, tileSize);
+      }
+
+      // Handle power-up activations (clears 3x3 area, row, or all of the same type)
+      function handlePowerUp(x, y) {
+        const powerUp = aliens[y][x];
+
+        if (powerUp === "💣") {
+          clearSurroundingTiles(x, y); // Bomb: 3x3 area
+        } else if (powerUp === "🌈") {
+          const targetType = getRandomAlienType(); // Rainbow: Clear all of the same type
+          clearAllTilesOfType(targetType);
+        } else if (powerUp === "🚀") {
+          clearRow(y); // Rocket: Clear the row
+        }
+
+        score += 30; // Increment score for power-up use
+        document.getElementById("score").textContent = score;
+
+        // Redraw and refill grid
+        drawGrid();
+        refillGrid();
+      }
+
+      // Clears a 3x3 area
+      function clearSurroundingTiles(x, y) {
+        for (let i = -1; i <= 1; i++) {
+          for (let j = -1; j <= 1; j++) {
+            const newX = x + i;
+            const newY = y + j;
+            if (
+              newX >= 0 &&
+              newX < gridWidth &&
+              newY >= 0 &&
+              newY < gridHeight
+            ) {
+              aliens[newY][newX] = null;
+            }
+          }
+        }
+      }
+
+      // Clears all tiles of the same type
+      function clearAllTilesOfType(type) {
+        for (let y = 0; y < gridHeight; y++) {
+          for (let x = 0; x < gridWidth; x++) {
+            if (aliens[y][x] === type) {
+              aliens[y][x] = null;
+            }
+          }
+        }
+      }
+
+      // Clears an entire row
+      function clearRow(y) {
+        for (let x = 0; x < gridWidth; x++) {
+          aliens[y][x] = null;
+        }
+      }
+
+      // Refill the grid after clearing
+      function refillGrid() {
+        for (let x = 0; x < gridWidth; x++) {
+          for (let y = gridHeight - 1; y >= 0; y--) {
+            if (aliens[y][x] === null) {
+              for (let yAbove = y - 1; yAbove >= 0; yAbove--) {
+                if (aliens[yAbove][x] !== null) {
+                  aliens[y][x] = aliens[yAbove][x];
+                  aliens[yAbove][x] = null;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        // Generate new tiles at the top
+        for (let x = 0; x < gridWidth; x++) {
+          for (let y = 0; y < gridHeight; y++) {
+            if (aliens[y][x] === null) {
+              aliens[y][x] =
+                alienTypes[Math.floor(Math.random() * alienTypes.length)];
+            }
+          }
+        }
+      }
+
+      // Power-up creation logic based on match lengths (4: Bomb, 5: Rocket, 6: Rainbow)
+      function handleMatches() {
+        const tilesToRemove = [];
+
+        // Horizontal matches
+        for (let y = 0; y < gridHeight; y++) {
+          for (let x = 0; x < gridWidth - 2; x++) {
+            let matchLength = 1;
+            while (
+              x + matchLength < gridWidth &&
+              aliens[y][x] === aliens[y][x + matchLength]
+            ) {
+              matchLength++;
+            }
+            if (matchLength >= 3) {
+              for (let i = 0; i < matchLength; i++) {
+                tilesToRemove.push({ x: x + i, y });
+              }
+              if (matchLength === 4) aliens[y][x + 1] = "💣"; // 4: Bomb
+              else if (matchLength === 5) aliens[y][x + 2] = "🚀"; // 5: Rocket
+              else if (matchLength >= 6) aliens[y][x + 3] = "🌈"; // 6: Rainbow
+              x += matchLength - 1;
+            }
+          }
+        }
+
+        // Vertical matches
+        for (let x = 0; x < gridWidth; x++) {
+          for (let y = 0; y < gridHeight - 2; y++) {
+            let matchLength = 1;
+            while (
+              y + matchLength < gridHeight &&
+              aliens[y][x] === aliens[y + matchLength][x]
+            ) {
+              matchLength++;
+            }
+            if (matchLength >= 3) {
+              for (let i = 0; i < matchLength; i++) {
+                tilesToRemove.push({ x, y: y + i });
+              }
+              if (matchLength === 4) aliens[y + 1][x] = "💣";
+              else if (matchLength === 5) aliens[y + 2][x] = "🚀";
+              else if (matchLength >= 6) aliens[y + 3][x] = "🌈";
+              y += matchLength - 1;
+            }
+          }
+        }
+
+        // Remove matched tiles and update score
+        tilesToRemove.forEach((tile) => {
+          aliens[tile.y][tile.x] = null;
+        });
+        score += tilesToRemove.length * 10;
+        document.getElementById("score").textContent = score;
+
+        setTimeout(() => {
+          refillGrid();
+          drawGrid();
+          if (checkForMatches()) handleMatches();
+        }, 500);
+      }
+
+      // Transition animation between levels
+      function levelTransition() {
+        let opacity = 1.0;
+
+        function fadeOut() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.globalAlpha = opacity;
+          drawGrid();
+
+          if (opacity > 0) {
+            opacity -= 0.05;
+            requestAnimationFrame(fadeOut);
+          } else {
+            ctx.globalAlpha = 1.0;
+            resetGridForNewLevel();
+          }
+        }
+
+        requestAnimationFrame(fadeOut);
+      }
+
+      // Reset grid for the new level
+      function resetGridForNewLevel() {
+        initGrid(); // Initialize new random grid
+        drawGrid();
+        startLevel(); // Restart the level with updated settings
+      }
+
+      // Check for valid moves
+      function checkForValidMoves() {
+        for (let y = 0; y < gridHeight; y++) {
+          for (let x = 0; x < gridWidth - 1; x++) {
+            swapTilesNoDraw(x, y, x + 1, y);
+            if (checkForMatches()) return true;
+            swapTilesNoDraw(x, y, x + 1, y); // Swap back
+          }
+        }
+        for (let x = 0; x < gridWidth; x++) {
+          for (let y = 0; y < gridHeight - 1; y++) {
+            swapTilesNoDraw(x, y, x, y + 1);
+            if (checkForMatches()) return true;
+            swapTilesNoDraw(x, y, x, y + 1); // Swap back
+          }
+        }
+        return false; // No valid moves left
+      }
+
+      // Swap tiles for checking valid moves (no drawing)
+      function swapTilesNoDraw(x1, y1, x2, y2) {
+        const temp = aliens[y1][x1];
+        aliens[y1][x1] = aliens[y2][x2];
+        aliens[y2][x2] = temp;
+      }
+
+      // Start the level with a timer and scoring
+      function startLevel() {
+        document.getElementById("level").textContent = level;
+        document.getElementById("timer").textContent = timeLeft;
+        document.getElementById("score").textContent = score;
+
+        const timerInterval = setInterval(() => {
+          timeLeft--;
+          document.getElementById("timer").textContent = timeLeft;
+
+          if (timeLeft <= 0 || score >= targetScore) {
+            clearInterval(timerInterval);
+            if (score >= targetScore) {
+              nextLevel();
+            } else {
+              gameOver();
+            }
+          }
+        }, 1000);
+      }
+
+      // Start a new level
+      function nextLevel() {
+        level++;
+        timeLeft = 60; // Reset timer
+        targetScore += 100; // Increase target score for next level
+        levelTransition(); // Perform level transition
+      }
+
+      // Game over logic
+      function gameOver() {
+        document.getElementById("gameOver").style.display = "block";
+      }
+
+      // Initialize the game
+      function initGame() {
+        resizeCanvas();
+        initGrid();
+        drawGrid();
+        startLevel();
+      }
+
+      // Resize canvas on window resize
+      window.addEventListener("resize", () => {
+        resizeCanvas();
+        drawGrid(); // Redraw grid on resize
+      });
+
+      // Start the game
+      initGame();
+    </script>
+  </body>
+</html>
